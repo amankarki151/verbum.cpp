@@ -1,0 +1,164 @@
+[
+  {
+    "text": "Hello world!",
+    "ids": [
+      9707,
+      1879,
+      0
+    ]
+  },
+  {
+    "text": "hello world",
+    "ids": [
+      14990,
+      1879
+    ]
+  },
+  {
+    "text": " hello",
+    "ids": [
+      23811
+    ]
+  },
+  {
+    "text": "I'm fine, thanks. How're you?",
+    "ids": [
+      40,
+      2776,
+      6915,
+      11,
+      9339,
+      13,
+      2585,
+      2299,
+      498,
+      30
+    ]
+  },
+  {
+    "text": "42 apples and 1337 oranges",
+    "ids": [
+      19,
+      17,
+      40676,
+      323,
+      220,
+      16,
+      18,
+      18,
+      22,
+      84038
+    ]
+  },
+  {
+    "text": "def main():\n    print('hi')\n",
+    "ids": [
+      750,
+      1887,
+      3932,
+      262,
+      1173,
+      492,
+      6023,
+      1305
+    ]
+  },
+  {
+    "text": "line one\n\nline three",
+    "ids": [
+      1056,
+      825,
+      271,
+      1056,
+      2326
+    ]
+  },
+  {
+    "text": "  leading and trailing  ",
+    "ids": [
+      220,
+      6388,
+      323,
+      27748,
+      256
+    ]
+  },
+  {
+    "text": "CamelCaseIdentifier and snake_case_name",
+    "ids": [
+      25406,
+      301,
+      4207,
+      8714,
+      323,
+      25265,
+      19096,
+      1269
+    ]
+  },
+  {
+    "text": "unicode: café, naïve, 日本語, emoji ok",
+    "ids": [
+      24519,
+      25,
+      51950,
+      11,
+      94880,
+      586,
+      11,
+      75402,
+      21894,
+      102819,
+      11,
+      42365,
+      5394
+    ]
+  },
+  {
+    "text": "<|im_start|>user\nwhat's up<|im_end|>\n",
+    "ids": [
+      151644,
+      872,
+      198,
+      12555,
+      594,
+      705,
+      151645,
+      198
+    ]
+  },
+  {
+    "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "ids": [
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440,
+      69440
+    ]
+  },
+  {
+    "text": "",
+    "ids": []
+  }
+]

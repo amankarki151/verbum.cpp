@@ -18,4 +18,4 @@ venv/
 .vscode/
 !.vscode/settings.json
 
-bench/results/*.json
+bench/results/*.json/tmp
