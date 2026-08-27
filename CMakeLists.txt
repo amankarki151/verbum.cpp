@@ -17,6 +17,8 @@ add_library(verbum_core
   core/src/config.cpp
   core/src/safetensors.cpp
   core/src/tokenizer.cpp
+  core/src/tensor.cpp
+  core/src/ops.cpp
 )
 
 target_include_directories(verbum_core PUBLIC
@@ -33,3 +35,7 @@ add_test(NAME safetensors COMMAND test_safetensors)
 add_executable(test_tokenizer tests/test_tokenizer.cpp)
 target_link_libraries(test_tokenizer PRIVATE verbum_core)
 add_test(NAME tokenizer COMMAND test_tokenizer)
+
+add_executable(test_ops tests/test_ops.cpp)
+target_link_libraries(test_ops PRIVATE verbum_core)
+add_test(NAME ops COMMAND test_ops)
