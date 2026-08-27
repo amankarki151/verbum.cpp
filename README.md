@@ -23,8 +23,8 @@ Nothing here calls the network. No API keys, no cloud inference.
 
 | Component | State |
 |---|---|
-| Safetensors loader | not started |
-| BPE tokenizer | not started |
+| Safetensors loader | working |
+| BPE tokenizer | working, matches HF reference on the test set |
 | Forward pass (CPU) | not started |
 | KV-cache + sampling | not started |
 | CUDA kernels | not started |
