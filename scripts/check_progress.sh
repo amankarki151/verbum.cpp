@@ -33,6 +33,11 @@ have core/src/nn.cpp
 have tests/test_nn.cpp
 have scripts/dump_reference_nn.py
 have tests/reference_nn.json
+have core/include/verbum/attention.h
+have core/src/attention.cpp
+have tests/test_attention.cpp
+have scripts/dump_reference_attn.py
+have tests/reference_attn.json
 
 echo ""
 echo "=== build ==="
@@ -71,6 +76,7 @@ run_test test_safetensors models/qwen3-0.6b
 run_test test_tokenizer models/qwen3-0.6b tests/reference_tokens.json
 run_test test_ops
 run_test test_nn tests/reference_nn.json
+run_test test_attention tests/reference_attn.json
 
 echo ""
 echo "=== git ==="

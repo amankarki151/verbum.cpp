@@ -20,6 +20,7 @@ add_library(verbum_core
   core/src/tensor.cpp
   core/src/ops.cpp
   core/src/nn.cpp
+  core/src/attention.cpp
 )
 
 target_include_directories(verbum_core PUBLIC
@@ -44,3 +45,7 @@ add_test(NAME ops COMMAND test_ops)
 add_executable(test_nn tests/test_nn.cpp)
 target_link_libraries(test_nn PRIVATE verbum_core)
 add_test(NAME nn COMMAND test_nn)
+
+add_executable(test_attention tests/test_attention.cpp)
+target_link_libraries(test_attention PRIVATE verbum_core)
+add_test(NAME attention COMMAND test_attention)
