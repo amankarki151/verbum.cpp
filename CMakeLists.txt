@@ -19,6 +19,7 @@ add_library(verbum_core
   core/src/tokenizer.cpp
   core/src/tensor.cpp
   core/src/ops.cpp
+  core/src/nn.cpp
 )
 
 target_include_directories(verbum_core PUBLIC
@@ -39,3 +40,7 @@ add_test(NAME tokenizer COMMAND test_tokenizer)
 add_executable(test_ops tests/test_ops.cpp)
 target_link_libraries(test_ops PRIVATE verbum_core)
 add_test(NAME ops COMMAND test_ops)
+
+add_executable(test_nn tests/test_nn.cpp)
+target_link_libraries(test_nn PRIVATE verbum_core)
+add_test(NAME nn COMMAND test_nn)
