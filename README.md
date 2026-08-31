@@ -25,7 +25,7 @@ Nothing here calls the network. No API keys, no cloud inference.
 |---|---|
 | Safetensors loader | working |
 | BPE tokenizer | working, matches HF reference on the test set |
-| Forward pass (CPU) | not started |
+| Forward pass (CPU) | working, logits match HF reference (max diff ~3e-5) |
 | KV-cache + sampling | not started |
 | CUDA kernels | not started |
 | INT8 quantization | not started |
