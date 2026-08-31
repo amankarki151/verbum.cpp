@@ -54,3 +54,6 @@ add_test(NAME attention COMMAND test_attention)
 add_executable(test_block tests/test_block.cpp)
 target_link_libraries(test_block PRIVATE verbum_core)
 add_test(NAME block COMMAND test_block)
+
+add_executable(test_logits tests/test_logits.cpp)
+target_link_libraries(test_logits PRIVATE verbum_core)
