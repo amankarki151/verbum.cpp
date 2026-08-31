@@ -22,6 +22,7 @@ add_library(verbum_core
   core/src/nn.cpp
   core/src/attention.cpp
   core/src/model.cpp
+  core/src/generate.cpp
 )
 
 target_include_directories(verbum_core PUBLIC
@@ -57,3 +58,7 @@ add_test(NAME block COMMAND test_block)
 
 add_executable(test_logits tests/test_logits.cpp)
 target_link_libraries(test_logits PRIVATE verbum_core)
+
+add_executable(test_cache tests/test_cache.cpp)
+target_link_libraries(test_cache PRIVATE verbum_core)
+add_test(NAME cache COMMAND test_cache)

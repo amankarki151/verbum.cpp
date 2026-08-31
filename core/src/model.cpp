@@ -146,4 +146,57 @@ void Model::forward(const std::vector<int>& ids, Tensor& logits) {
     matmul_nt(normed, head, logits);
 }
 
+// One token through one layer, using the cache. Same structure as
+// layer_forward -- pre-norm, residual, pre-norm, residual -- just with the
+// cached attention step in the middle.
+static void layer_step(const Tensor& x, const LayerWeights& w,
+                       const AttentionConfig& cfg, const RopeTable& rope,
+                       KVCache& cache, Tensor& out) {
+    const int64_t hidden = x.dim(1);
+    Tensor normed({1, hidden});
+    Tensor attn_out({1, hidden});
+
+    rmsnorm(x, w.input_norm, cfg.rms_eps, normed);
+    attention_step(normed, w.attn, cfg, rope, cache, attn_out);
+    for (int64_t i = 0; i < hidden; i++) {
+        out.data()[i] = x.data()[i] + attn_out.data()[i];
+    }
+
+    Tensor ffn_out({1, hidden});
+    rmsnorm(out, w.post_attention_norm, cfg.rms_eps, normed);
+    ffn_forward(normed, w.ffn, ffn_out);
+    for (int64_t i = 0; i < hidden; i++) {
+        out.data()[i] += ffn_out.data()[i];
+    }
+}
+
+void Model::reset_cache(int max_seq) {
+    caches_.resize(cfg_.num_hidden_layers);
+    for (auto& c : caches_) {
+        c.init(cfg_.num_key_value_heads, cfg_.head_dim, max_seq);
+    }
+}
+
+void Model::step(int token_id, Tensor& logits) {
+    if (caches_.empty()) throw std::runtime_error("call reset_cache() first");
+
+    const int64_t hidden = cfg_.hidden_size;
+    const int64_t vocab = cfg_.vocab_size;
+
+    Tensor h({1, hidden});
+    embedding_lookup(embed_, hidden, {token_id}, h);
+
+    Tensor next({1, hidden});
+    for (int i = 0; i < cfg_.num_hidden_layers; i++) {
+        layer_step(h, layers_[i], acfg_, rope_, caches_[i], next);
+        h = next;
+    }
+
+    Tensor normed({1, hidden});
+    rmsnorm(h, final_norm_, cfg_.rms_norm_eps, normed);
+
+    Tensor head({vocab, hidden}, lm_head_);
+    matmul_nt(normed, head, logits);
+}
+
 }  // namespace verbum

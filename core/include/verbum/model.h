@@ -5,6 +5,7 @@
 
 #include "verbum/attention.h"
 #include "verbum/config.h"
+#include "verbum/generate.h"
 #include "verbum/nn.h"
 #include "verbum/safetensors.h"
 #include "verbum/tensor.h"
@@ -47,6 +48,10 @@ public:
 
     const ModelConfig& config() const { return cfg_; }
 
+    // Cached generation. Call reset_cache() once, then step() per token.
+    void reset_cache(int max_seq);
+    void step(int token_id, Tensor& logits);   // logits is [1, vocab]
+
 private:
     ModelConfig cfg_;
     AttentionConfig acfg_;
@@ -56,6 +61,7 @@ private:
     std::vector<float> lm_head_;    // [vocab, hidden], flattened
     std::vector<float> final_norm_;
     std::vector<LayerWeights> layers_;
+    std::vector<KVCache> caches_;
 };
 
 }  // namespace verbum
