@@ -7,6 +7,10 @@ weights and runs the whole forward pass itself.
 *Verbum* is Latin for "word", which is what the thing produces, one token at a
 time.
 
+## Writing
+
+- [What Actually Happens Inside a Transformer Forward Pass](https://amankarki.hashnode.dev/what-actually-happens-inside-a-transformer-forward-pass)
+
 ## What it does
 
 Loads a small open-weight model (Qwen3, ~0.6B) and runs it end to end:
