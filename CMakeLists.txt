@@ -62,3 +62,6 @@ target_link_libraries(test_logits PRIVATE verbum_core)
 add_executable(test_cache tests/test_cache.cpp)
 target_link_libraries(test_cache PRIVATE verbum_core)
 add_test(NAME cache COMMAND test_cache)
+
+add_executable(generate tools/generate.cpp)
+target_link_libraries(generate PRIVATE verbum_core)
