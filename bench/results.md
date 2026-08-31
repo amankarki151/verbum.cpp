@@ -67,3 +67,56 @@ blocking Day 6, which was about correctness and first real output.
 Deterministic, coherent, and factually correct on the first three -- good
 confirmation that Day 5's verified forward pass is doing real work, not just
 passing a logit-diff test.
+
+
+## CUDA matmul (Day 7)
+
+256x1024 @ 1024x1024, float32, run on Kaggle, Tesla T4 (40 SMs, 15.6 GB).
+
+| Implementation | Time | Throughput | vs CPU baseline |
+|---|---|---|---|
+| CPU naive (Day 2, Apple Silicon) | 254.3 ms | 2.11 GFLOP/s | 1x |
+| CUDA naive (TILE=16 launch config) | 11.076 ms | 48.47 GFLOP/s | 4.6x |
+| CUDA tiled (TILE=16) | 0.742 ms | 723.83 GFLOP/s | 342.9x |
+
+Tile size sweep, tiled kernel (naive kernel's launch config also uses TILE,
+so its number shifts too -- not just the tiled kernel):
+
+| TILE | naive | tiled |
+|---|---|---|
+| 8 | 86.49 GFLOP/s | 263.04 GFLOP/s |
+| 16 | 48.47 GFLOP/s | 723.83 GFLOP/s |
+| 32 | 34.20 GFLOP/s | 751.21 GFLOP/s |
+
+Tiled throughput climbs with tile size (more shared-memory reuse per global
+load); naive throughput falls (larger blocks leave fewer blocks resident per
+SM, which hurts a memory-bound kernel's ability to hide latency). TILE=16 was
+kept as the shipped default -- TILE=32 is marginally faster but only by about
+4%, not worth the larger, less flexible block size for that little gain.
+
+Resource usage (`--ptxas-options=-v`, TILE=16):
+
+| Kernel | Registers/thread | Shared mem/block | Spills |
+|---|---|---|---|
+| tiled | 37 | 2176 bytes | 0 |
+| naive | 46 | 0 (388 bytes constant mem) | 0 |
+
+Zero spills on both confirms neither kernel is register-pressured enough to
+spill to local memory, which would have quietly tanked performance without
+showing up as a correctness failure.
+
+Both kernels verified against the CPU reference on five sizes, including
+non-multiples of the tile size, before any timing was taken -- max diff
+1.4e-6, consistent with float accumulation order rather than a bug.
+
+Peak FP32 throughput on a T4 is roughly 8.1 TFLOP/s. The tiled kernel's
+723.83 GFLOP/s is about 9% of that ceiling -- expected for a first
+hand-written shared-memory kernel with no register blocking or vectorized
+loads yet, and a real number rather than something that looks suspiciously
+close to peak.
+
+Caveat worth stating plainly: the "vs CPU baseline" column compares against
+my own naive single-threaded CPU implementation, not a tuned one. A blocked,
+SIMD, multithreaded CPU matmul would land in the tens of GFLOP/s and close
+most of that gap. The honest claim is "GPU vs my reference implementation,"
+not "GPU vs what a CPU can do."
