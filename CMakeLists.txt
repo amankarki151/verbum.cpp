@@ -71,3 +71,6 @@ target_link_libraries(generate PRIVATE verbum_core)
 add_executable(test_quant tests/test_quant.cpp)
 target_link_libraries(test_quant PRIVATE verbum_core)
 add_test(NAME quant COMMAND test_quant)
+
+add_executable(quant_report tools/quant_report.cpp)
+target_link_libraries(quant_report PRIVATE verbum_core)

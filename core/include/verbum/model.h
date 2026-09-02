@@ -9,6 +9,7 @@
 #include "verbum/nn.h"
 #include "verbum/safetensors.h"
 #include "verbum/tensor.h"
+#include "verbum/quant.h"
 
 namespace verbum {
 
@@ -50,7 +51,14 @@ public:
 
     // Cached generation. Call reset_cache() once, then step() per token.
     void reset_cache(int max_seq);
-    void step(int token_id, Tensor& logits);   // logits is [1, vocab]
+    void step(int token_id, Tensor& logits);   // logits is [1, vocab
+
+        // Replaces the f32 weight matrices with int8 + per-row scales, in place.
+    // Only the big projection matrices -- norms and embeddings stay f32,
+    // since they're small and more sensitive.
+    void quantize();
+    bool is_quantized() const { return quantized_; }
+    size_t weight_bytes() const;
 
 private:
     ModelConfig cfg_;
@@ -62,6 +70,13 @@ private:
     std::vector<float> final_norm_;
     std::vector<LayerWeights> layers_;
     std::vector<KVCache> caches_;
+
+        bool quantized_ = false;
+    struct QuantLayer {
+        QuantTensor q_proj, k_proj, v_proj, o_proj;
+        QuantTensor gate_proj, up_proj, down_proj;
+    };
+    std::vector<QuantLayer> qlayers_;
 };
 
 }  // namespace verbum
