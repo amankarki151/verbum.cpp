@@ -23,6 +23,8 @@ add_library(verbum_core
   core/src/attention.cpp
   core/src/model.cpp
   core/src/generate.cpp
+  core/src/quant.cpp
+  
 )
 
 target_include_directories(verbum_core PUBLIC
@@ -65,3 +67,7 @@ add_test(NAME cache COMMAND test_cache)
 
 add_executable(generate tools/generate.cpp)
 target_link_libraries(generate PRIVATE verbum_core)
+
+add_executable(test_quant tests/test_quant.cpp)
+target_link_libraries(test_quant PRIVATE verbum_core)
+add_test(NAME quant COMMAND test_quant)
