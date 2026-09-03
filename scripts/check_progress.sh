@@ -10,34 +10,58 @@ ok()   { echo "  ok      $1"; }
 miss() { echo "  MISSING $1"; fail=$((fail+1)); }
 have() { [ -f "$1" ] && ok "$1" || miss "$1"; }
 
-echo "=== Day 0/1/2 files ==="
+echo "=== source files ==="
 have core/include/verbum/config.h
 have core/include/verbum/safetensors.h
 have core/include/verbum/tokenizer.h
 have core/include/verbum/tensor.h
 have core/include/verbum/ops.h
+have core/include/verbum/nn.h
+have core/include/verbum/attention.h
+have core/include/verbum/model.h
+have core/include/verbum/generate.h
+have core/include/verbum/quant.h
 have core/src/config.cpp
 have core/src/safetensors.cpp
 have core/src/tokenizer.cpp
 have core/src/tensor.cpp
 have core/src/ops.cpp
+have core/src/nn.cpp
+have core/src/attention.cpp
+have core/src/model.cpp
+have core/src/generate.cpp
+have core/src/quant.cpp
+
+echo ""
+echo "=== tests and tools ==="
 have tests/test_safetensors.cpp
 have tests/test_tokenizer.cpp
 have tests/test_ops.cpp
+have tests/test_nn.cpp
+have tests/test_attention.cpp
+have tests/test_block.cpp
+have tests/test_cache.cpp
+have tests/test_quant.cpp
+have tests/test_logits.cpp
+have tools/generate.cpp
+have tools/quant_report.cpp
+have kernels/matmul.cu
+have kernels/ops.cu
+
+echo ""
+echo "=== reference data and model ==="
 have scripts/dump_reference_tokens.py
+have scripts/dump_reference_nn.py
+have scripts/dump_reference_attn.py
+have scripts/dump_reference_block.py
+have scripts/dump_reference_logits.py
 have tests/reference_tokens.json
+have tests/reference_nn.json
+have tests/reference_attn.json
+have tests/reference_block.json
+have tests/reference_logits.json
 have models/qwen3-0.6b/config.json
 have models/qwen3-0.6b/tokenizer.json
-have core/include/verbum/nn.h
-have core/src/nn.cpp
-have tests/test_nn.cpp
-have scripts/dump_reference_nn.py
-have tests/reference_nn.json
-have core/include/verbum/attention.h
-have core/src/attention.cpp
-have tests/test_attention.cpp
-have scripts/dump_reference_attn.py
-have tests/reference_attn.json
 
 echo ""
 echo "=== build ==="
@@ -77,11 +101,14 @@ run_test test_tokenizer models/qwen3-0.6b tests/reference_tokens.json
 run_test test_ops
 run_test test_nn tests/reference_nn.json
 run_test test_attention tests/reference_attn.json
+run_test test_block tests/reference_block.json
+run_test test_cache
+run_test test_quant
 
 echo ""
 echo "=== git ==="
 echo "commits:"
-git log --oneline 2>/dev/null || echo "  (no commits yet)"
+git log --oneline 2>/dev/null | head -20 || echo "  (no commits yet)"
 echo ""
 echo "uncommitted changes:"
 git status --short

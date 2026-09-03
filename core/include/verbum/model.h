@@ -7,9 +7,9 @@
 #include "verbum/config.h"
 #include "verbum/generate.h"
 #include "verbum/nn.h"
+#include "verbum/quant.h"
 #include "verbum/safetensors.h"
 #include "verbum/tensor.h"
-#include "verbum/quant.h"
 
 namespace verbum {
 
@@ -24,6 +24,9 @@ struct FFNWeights {
 };
 
 void ffn_forward(const Tensor& x, const FFNWeights& w, Tensor& out);
+
+// Quantized twin of ffn_forward.
+void ffn_forward_q(const Tensor& x, const QuantLayer& ql, Tensor& out);
 
 // One transformer layer: norm -> attention -> residual, then
 // norm -> ffn -> residual. The norms sit *before* each sublayer (pre-norm),
@@ -51,11 +54,11 @@ public:
 
     // Cached generation. Call reset_cache() once, then step() per token.
     void reset_cache(int max_seq);
-    void step(int token_id, Tensor& logits);   // logits is [1, vocab
+    void step(int token_id, Tensor& logits);   // logits is [1, vocab]
 
-        // Replaces the f32 weight matrices with int8 + per-row scales, in place.
-    // Only the big projection matrices -- norms and embeddings stay f32,
-    // since they're small and more sensitive.
+    // Replaces the f32 projection matrices with int8 + per-row scales, in
+    // place, and frees the f32 originals. Norms, embeddings, and lm_head
+    // stay f32 -- norms are tiny, embeddings are precision-sensitive.
     void quantize();
     bool is_quantized() const { return quantized_; }
     size_t weight_bytes() const;
@@ -71,11 +74,7 @@ private:
     std::vector<LayerWeights> layers_;
     std::vector<KVCache> caches_;
 
-        bool quantized_ = false;
-    struct QuantLayer {
-        QuantTensor q_proj, k_proj, v_proj, o_proj;
-        QuantTensor gate_proj, up_proj, down_proj;
-    };
+    bool quantized_ = false;
     std::vector<QuantLayer> qlayers_;
 };
 

@@ -46,6 +46,23 @@ void ffn_forward(const Tensor& x, const FFNWeights& w, Tensor& out) {
     matmul_nt(gate, w.down_proj, out);
 }
 
+void ffn_forward_q(const Tensor& x, const QuantLayer& ql, Tensor& out) {
+    if (x.rank() != 2) throw std::runtime_error("ffn_forward_q wants a 2-D input");
+    const int64_t seq = x.dim(0);
+    const int64_t ffn = ql.gate_proj.rows;
+
+    Tensor gate({seq, ffn});
+    Tensor up({seq, ffn});
+    matmul_nt_q8(x, ql.gate_proj, gate);
+    matmul_nt_q8(x, ql.up_proj, up);
+
+    for (int64_t i = 0; i < gate.numel(); i++) {
+        gate.data()[i] = silu(gate.data()[i]) * up.data()[i];
+    }
+
+    matmul_nt_q8(gate, ql.down_proj, out);
+}
+
 void layer_forward(const Tensor& x, const LayerWeights& w,
                    const AttentionConfig& cfg, const RopeTable& rope,
                    Tensor& out) {
@@ -122,6 +139,11 @@ Model::Model(const std::string& model_dir) {
 }
 
 void Model::forward(const std::vector<int>& ids, Tensor& logits) {
+    if (quantized_) {
+        throw std::runtime_error(
+            "forward() has no quantized path yet -- use step() for quantized mode");
+    }
+
     const int64_t seq = static_cast<int64_t>(ids.size());
     const int64_t hidden = cfg_.hidden_size;
     const int64_t vocab = cfg_.vocab_size;
@@ -170,6 +192,29 @@ static void layer_step(const Tensor& x, const LayerWeights& w,
     }
 }
 
+// Quantized twin of layer_step: same pre-norm, residual, pre-norm, residual
+// shape, calling the _q attention and ffn variants instead.
+static void layer_step_q(const Tensor& x, const LayerWeights& w,
+                         const QuantLayer& ql, const AttentionConfig& cfg,
+                         const RopeTable& rope, KVCache& cache, Tensor& out) {
+    const int64_t hidden = x.dim(1);
+    Tensor normed({1, hidden});
+    Tensor attn_out({1, hidden});
+
+    rmsnorm(x, w.input_norm, cfg.rms_eps, normed);
+    attention_step_q(normed, w.attn.q_norm, w.attn.k_norm, ql, cfg, rope, cache, attn_out);
+    for (int64_t i = 0; i < hidden; i++) {
+        out.data()[i] = x.data()[i] + attn_out.data()[i];
+    }
+
+    Tensor ffn_out({1, hidden});
+    rmsnorm(out, w.post_attention_norm, cfg.rms_eps, normed);
+    ffn_forward_q(normed, ql, ffn_out);
+    for (int64_t i = 0; i < hidden; i++) {
+        out.data()[i] += ffn_out.data()[i];
+    }
+}
+
 void Model::reset_cache(int max_seq) {
     caches_.resize(cfg_.num_hidden_layers);
     for (auto& c : caches_) {
@@ -188,7 +233,11 @@ void Model::step(int token_id, Tensor& logits) {
 
     Tensor next({1, hidden});
     for (int i = 0; i < cfg_.num_hidden_layers; i++) {
-        layer_step(h, layers_[i], acfg_, rope_, caches_[i], next);
+        if (quantized_) {
+            layer_step_q(h, layers_[i], qlayers_[i], acfg_, rope_, caches_[i], next);
+        } else {
+            layer_step(h, layers_[i], acfg_, rope_, caches_[i], next);
+        }
         h = next;
     }
 
@@ -197,6 +246,63 @@ void Model::step(int token_id, Tensor& logits) {
 
     Tensor head({vocab, hidden}, lm_head_);
     matmul_nt(normed, head, logits);
+}
+
+void Model::quantize() {
+    if (quantized_) return;
+
+    qlayers_.resize(layers_.size());
+    for (size_t i = 0; i < layers_.size(); i++) {
+        LayerWeights& L = layers_[i];
+        QuantLayer& Q = qlayers_[i];
+
+        Q.q_proj = quantize_rows(L.attn.q_proj);
+        Q.k_proj = quantize_rows(L.attn.k_proj);
+        Q.v_proj = quantize_rows(L.attn.v_proj);
+        Q.o_proj = quantize_rows(L.attn.o_proj);
+        Q.gate_proj = quantize_rows(L.ffn.gate_proj);
+        Q.up_proj = quantize_rows(L.ffn.up_proj);
+        Q.down_proj = quantize_rows(L.ffn.down_proj);
+
+        // Release the f32 copies -- assigning a default-constructed Tensor
+        // drops the old vector's memory. Without this, quantizing would cost
+        // more memory than it saves rather than less.
+        L.attn.q_proj = Tensor();
+        L.attn.k_proj = Tensor();
+        L.attn.v_proj = Tensor();
+        L.attn.o_proj = Tensor();
+        L.ffn.gate_proj = Tensor();
+        L.ffn.up_proj = Tensor();
+        L.ffn.down_proj = Tensor();
+    }
+    quantized_ = true;
+}
+
+size_t Model::weight_bytes() const {
+    size_t total = embed_.size() * sizeof(float) + lm_head_.size() * sizeof(float)
+                 + final_norm_.size() * sizeof(float);
+    for (size_t i = 0; i < layers_.size(); i++) {
+        total += layers_[i].input_norm.size() * sizeof(float);
+        total += layers_[i].post_attention_norm.size() * sizeof(float);
+        total += layers_[i].attn.q_norm.size() * sizeof(float);
+        total += layers_[i].attn.k_norm.size() * sizeof(float);
+        if (quantized_) {
+            const QuantLayer& Q = qlayers_[i];
+            total += Q.q_proj.bytes() + Q.k_proj.bytes() + Q.v_proj.bytes()
+                   + Q.o_proj.bytes() + Q.gate_proj.bytes() + Q.up_proj.bytes()
+                   + Q.down_proj.bytes();
+        } else {
+            const LayerWeights& L = layers_[i];
+            total += static_cast<size_t>(L.attn.q_proj.numel()) * sizeof(float);
+            total += static_cast<size_t>(L.attn.k_proj.numel()) * sizeof(float);
+            total += static_cast<size_t>(L.attn.v_proj.numel()) * sizeof(float);
+            total += static_cast<size_t>(L.attn.o_proj.numel()) * sizeof(float);
+            total += static_cast<size_t>(L.ffn.gate_proj.numel()) * sizeof(float);
+            total += static_cast<size_t>(L.ffn.up_proj.numel()) * sizeof(float);
+            total += static_cast<size_t>(L.ffn.down_proj.numel()) * sizeof(float);
+        }
+    }
+    return total;
 }
 
 }  // namespace verbum

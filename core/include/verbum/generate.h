@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "verbum/attention.h"
+#include "verbum/quant.h"
 #include "verbum/tensor.h"
 
 namespace verbum {
@@ -34,6 +35,14 @@ struct KVCache {
 void attention_step(const Tensor& x, const AttentionWeights& w,
                     const AttentionConfig& cfg, const RopeTable& rope,
                     KVCache& cache, Tensor& out);
+
+// Quantized twin of attention_step. q_norm/k_norm are passed separately
+// rather than bundled with the QuantLayer because Model::quantize() only
+// quantizes the projection matrices; the norm weights stay f32 either way.
+void attention_step_q(const Tensor& x, const std::vector<float>& q_norm,
+                      const std::vector<float>& k_norm, const QuantLayer& ql,
+                      const AttentionConfig& cfg, const RopeTable& rope,
+                      KVCache& cache, Tensor& out);
 
 // Sampling knobs. temperature <= 0 means greedy (always take the argmax),
 // which is also what top_k == 1 gives you.

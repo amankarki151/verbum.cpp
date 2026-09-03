@@ -26,6 +26,15 @@ struct QuantTensor {
     }
 };
 
+// A quantized layer's worth of projection matrices -- the int8 counterpart
+// to LayerWeights' attention and FFN projections. Lives here rather than in
+// model.h so that generate.cpp (which needs it for attention_step_q) doesn't
+// have to include model.h and create a circular dependency.
+struct QuantLayer {
+    QuantTensor q_proj, k_proj, v_proj, o_proj;
+    QuantTensor gate_proj, up_proj, down_proj;
+};
+
 // Symmetric quantization: no zero-point, so zero maps exactly to zero.
 // Asymmetric (with a zero-point) fits skewed distributions slightly better
 // but costs an extra term in every dot product. Transformer weights are

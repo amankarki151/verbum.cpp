@@ -120,3 +120,40 @@ my own naive single-threaded CPU implementation, not a tuned one. A blocked,
 SIMD, multithreaded CPU matmul would land in the tens of GFLOP/s and close
 most of that gap. The honest claim is "GPU vs my reference implementation,"
 not "GPU vs what a CPU can do."
+
+## INT8 quantization (Day 9)
+
+Per-row symmetric INT8 quantization applied to all 28 layers' attention and
+FFN projection matrices (196 tensors total: q/k/v/o_proj + gate/up/down_proj
+per layer). Measured against the real Qwen3-0.6B weights, not synthetic data.
+
+| | f32 | int8 | ratio |
+|---|---|---|---|
+| Quantized matrices only | 1761.61 MB | 441.78 MB | 3.99x |
+
+Worst single tensor: `model.layers.19.mlp.down_proj.weight` at 1.20% relative
+RMS error. Layer 0's range: 0.83% (k_proj) to 1.06% (o_proj). All 196
+quantized tensors landed under 1.3% -- closely matching the synthetic weight
+tests from the morning push (0.79-0.85%), which means real model weights
+quantize just as cleanly as the Gaussian approximation predicted.
+
+**Honest caveat on the headline number.** 3.99x is the ratio for the
+quantized matrices alone. The embedding table and lm_head stay f32 -- and
+embed_tokens turns out to be the single largest tensor in the entire model
+(622 MB on its own), so it dominates what "whole model" actually means.
+
+Worse: the current loader loads `lm_head.weight` as a full separate copy of
+`embed_tokens.weight` even though the config says `tied_embeddings=yes` and
+they're numerically identical -- an existing inefficiency from Day 5, not
+something today introduced, costing an extra ~622 MB for nothing. Flagged
+for a future fix, not corrected today, since fixing it isn't quantization's
+job and conflating the two would muddy both numbers.
+
+| | Total f32 (current code) | Total after quantizing | Whole-model ratio |
+|---|---|---|---|
+| As currently loaded (with the duplicate) | 3006.5 MB | 1686.7 MB | 1.78x |
+| If the lm_head duplication were also fixed | 2384.2 MB | 1064.3 MB | 2.24x |
+
+The honest number to lead with anywhere public is **2.24x whole-model**, not
+3.99x -- that's what quantization alone actually buys once the unrelated
+lm_head bug isn't inflating the "before" number.
