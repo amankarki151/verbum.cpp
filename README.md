@@ -30,9 +30,9 @@ Nothing here calls the network. No API keys, no cloud inference.
 | Safetensors loader | working |
 | BPE tokenizer | working, matches HF reference on the test set |
 | Forward pass (CPU) | working, logits match HF reference (max diff ~3e-5) |
-| KV-cache + sampling | not started |
-| CUDA kernels | not started |
-| INT8 quantization | not started |
+| KV-cache + sampling | working, cached path matches full-sequence attention exactly (0.000000 diff); first real generated text |
+| CUDA kernels | matmul, rmsnorm, rope, swiglu elementwise, residual add, and attention-decode all written and verified against CPU references on a T4 (723.83 GFLOP/s tiled matmul, 342.9x over CPU reference) -- not yet wired into the model's forward pass, so generation still runs on CPU |
+| INT8 quantization | working, identical output to f32 at 3.99x on quantized matrices, 1.78x whole-model with current lm_head duplication (2.24x once that's fixed) |
 | NPC memory (Lattice) | not started |
 | Demo shell | not started |
 
