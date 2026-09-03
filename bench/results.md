@@ -157,3 +157,9 @@ job and conflating the two would muddy both numbers.
 The honest number to lead with anywhere public is **2.24x whole-model**, not
 3.99x -- that's what quantization alone actually buys once the unrelated
 lm_head bug isn't inflating the "before" number.
+
+Honest note on speed: decode throughput barely moved (1.83 -> 1.88 tok/s).
+Expected -- matmul_nt_q8 converts each int8 weight to float before
+multiplying, with no SIMD speedup applied. Today's result is a memory win,
+not a speed win; a faster quantized matmul (vectorized int8 dot products) is
+future work, not something claimed here.
