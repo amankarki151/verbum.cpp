@@ -6,12 +6,16 @@
 #include "verbum/generate.h"
 #include "verbum/model.h"
 #include "verbum/tokenizer.h"
+#ifdef VERBUM_CUDA
+#include "verbum/cuda_backend.h"
+#endif
 using namespace verbum;
 int main(int argc, char** argv) {
     std::string model_dir = "models/qwen3-0.6b";
     std::string prompt = "The capital of France is";
     int max_tokens = 40;
     bool use_quant = false;
+    bool use_cuda = false;
     SamplerConfig sc;
     sc.temperature = 0.8f;
     sc.top_k = 40;
@@ -29,10 +33,11 @@ int main(int argc, char** argv) {
         else if (a == "--seed") sc.seed = std::stoull(next());
         else if (a == "--greedy") sc.temperature = 0.0f;
         else if (a == "--quantize") use_quant = true;
+        else if (a == "--cuda") use_cuda = true;
         else {
             std::cerr << "usage: generate [-m dir] [-p prompt] [-n tokens] "
                          "[-t temp] [--top-k k] [--top-p p] [--seed s] "
-                         "[--greedy] [--quantize]\n";
+                         "[--greedy] [--quantize] [--cuda]\n";
             return 1;
         }
     }
@@ -41,6 +46,10 @@ int main(int argc, char** argv) {
         std::cerr << "loading weights...\n";
         Model model(model_dir);
         std::cerr << "weights: " << model.weight_bytes() / 1e6 << " MB (f32)\n";
+        if (use_quant && use_cuda) {
+            std::cerr << "error: --quantize and --cuda together aren't supported yet -- pick one\n";
+            return 1;
+        }
         if (use_quant) {
             model.quantize();
             std::cerr << "weights: " << model.weight_bytes() / 1e6 << " MB (int8)\n";
@@ -52,6 +61,12 @@ int main(int argc, char** argv) {
             return 1;
         }
         model.reset_cache(static_cast<int>(ids.size()) + max_tokens + 8);
+        if (use_cuda) {
+            model.to_cuda();
+#ifdef VERBUM_CUDA
+            std::cerr << "cuda: " << cuda_device_name() << "\n";
+#endif
+        }
         Tensor logits({1, static_cast<int64_t>(model.config().vocab_size)});
         const int64_t vocab = model.config().vocab_size;
         // Prefill: push the prompt through one token at a time to fill the
@@ -79,7 +94,7 @@ int main(int argc, char** argv) {
             std::chrono::duration<double>(t_prefill - t_start).count();
         const double decode_s =
             std::chrono::duration<double>(t_end - t_prefill).count();
-        std::cerr << "\nmode: " << (model.is_quantized() ? "int8" : "f32") << "\n";
+        std::cerr << "\nmode: " << (model.is_cuda() ? "cuda" : (model.is_quantized() ? "int8" : "f32")) << "\n";
         std::cerr << "prompt: " << ids.size() << " tokens in " << prefill_s << " s ("
                   << (ids.size() / prefill_s) << " tok/s)\n";
         if (generated > 0) {
