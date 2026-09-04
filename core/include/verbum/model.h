@@ -69,6 +69,15 @@ public:
     void to_cuda();
     bool is_cuda() const { return cuda_; }
 
+        // Runs the token sequence through the model and returns the mean-pooled
+    // final hidden state -- a [hidden] vector that encodes the sequence's
+    // meaning. This is what gets stored in the vector index for NPC memory.
+    //
+    // Not a purpose-trained embedding model, just the decoder's own hidden
+    // states pooled. Good enough to tell distinct topics apart, which is all
+    // the NPC memory needs.
+    std::vector<float> embed_text(const std::vector<int>& ids);
+
 private:
     ModelConfig cfg_;
     AttentionConfig acfg_;

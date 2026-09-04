@@ -12,6 +12,14 @@ if(VERBUM_ENABLE_CUDA)
   endif()
 endif()
 
+option(VERBUM_BUILD_PYTHON "Build the Python bindings" OFF)
+
+if(VERBUM_BUILD_PYTHON)
+  find_package(pybind11 REQUIRED)
+  pybind11_add_module(verbum bindings/verbum_py.cpp)
+  target_link_libraries(verbum PRIVATE verbum_core)
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

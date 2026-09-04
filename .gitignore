@@ -19,3 +19,4 @@ venv/
 !.vscode/settings.json
 
 bench/results/*.json/tmp
+build-py/

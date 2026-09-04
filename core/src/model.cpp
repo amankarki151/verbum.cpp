@@ -163,6 +163,50 @@ void Model::forward(const std::vector<int>& ids, Tensor& logits) {
     matmul_nt(normed, head, logits);
 }
 
+std::vector<float> Model::embed_text(const std::vector<int>& ids) {
+    if (quantized_) {
+        throw std::runtime_error("embed_text needs the f32 path");
+    }
+    if (ids.empty()) throw std::runtime_error("embed_text got no tokens");
+
+    const int64_t seq = static_cast<int64_t>(ids.size());
+    const int64_t hidden = cfg_.hidden_size;
+
+    Tensor h({seq, hidden});
+    embedding_lookup(embed_, hidden, ids, h);
+
+    Tensor next({seq, hidden});
+    for (int i = 0; i < cfg_.num_hidden_layers; i++) {
+        layer_forward(h, layers_[i], acfg_, rope_, next);
+        h = next;
+    }
+
+    Tensor normed({seq, hidden});
+    rmsnorm(h, final_norm_, cfg_.rms_norm_eps, normed);
+
+    // Mean-pool across the sequence. Every token's hidden state contributes
+    // equally -- simple, and there's no attention-mask complication here
+    // since we never pad.
+    std::vector<float> out(static_cast<size_t>(hidden), 0.0f);
+    for (int64_t t = 0; t < seq; t++) {
+        const float* row = normed.data() + t * hidden;
+        for (int64_t d = 0; d < hidden; d++) out[(size_t)d] += row[d];
+    }
+    const float inv = 1.0f / static_cast<float>(seq);
+    for (auto& v : out) v *= inv;
+
+    // L2-normalise so cosine similarity reduces to a dot product, which is
+    // what most vector indexes want anyway.
+    double norm = 0.0;
+    for (float v : out) norm += (double)v * v;
+    norm = std::sqrt(norm);
+    if (norm > 0) {
+        const float n = static_cast<float>(1.0 / norm);
+        for (auto& v : out) v *= n;
+    }
+    return out;
+}
+
 static void layer_step(const Tensor& x, const LayerWeights& w,
                        const AttentionConfig& cfg, const RopeTable& rope,
                        KVCache& cache, Tensor& out) {
