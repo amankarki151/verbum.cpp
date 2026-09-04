@@ -163,3 +163,33 @@ Expected -- matmul_nt_q8 converts each int8 weight to float before
 multiplying, with no SIMD speedup applied. Today's result is a memory win,
 not a speed win; a faster quantized matmul (vectorized int8 dot products) is
 future work, not something claimed here.
+
+## CUDA end-to-end generation (Day 10)
+
+Qwen3-0.6B, f32 weights, Tesla T4, greedy sampling, identical output to CPU
+confirmed on "The capital of France is" -> "Paris. ... Rome. ... Madrid. ...
+China" -- exact match, word for word.
+
+| | Prefill | Decode |
+|---|---|---|
+| CPU (this Kaggle instance) | 0.73 tok/s | 0.74 tok/s |
+| CUDA (T4) | 9.66 tok/s | 26.83 tok/s |
+| Speedup, same machine | 13.2x | 36.2x |
+
+For context against the documented Mac baseline (bench/results.md, Day 6):
+CPU decode there was 1.83 tok/s, so CUDA's 26.83 tok/s is about **14.7x**
+over the machine this project was actually developed on -- the more
+honest number to lead with publicly, since "36x" is partly this Kaggle
+instance's CPU being weaker than usual, not purely the GPU's doing.
+
+Sanity check: T4 memory bandwidth is ~320 GB/s. Decode is memory-bound --
+every token reads the full ~3GB of f32 weights once -- putting the
+theoretical ceiling around 106 tok/s. 26.83 tok/s is roughly 25% of that,
+which is the right range for a first integration with per-op kernel
+launches, no fusion, and a matmul kernel not specifically tuned for the
+skinny matrix-vector shape decode uses. Real room to improve, not a red
+flag on the number itself.
+
+Prefill's smaller speedup (13.2x vs decode's 36.2x) traces back to the same
+unbatched-prefill limitation noted in Day 6 -- fixed per-call overhead
+matters more across 5 tokens than 20.
