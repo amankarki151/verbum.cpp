@@ -41,7 +41,6 @@ void ffn_forward(const Tensor& x, const FFNWeights& w, Tensor& out) {
     matmul_nt(x, w.gate_proj, gate);
     matmul_nt(x, w.up_proj, up);
 
-    // silu on the gate branch, then elementwise into the up branch.
     for (int64_t i = 0; i < gate.numel(); i++) {
         gate.data()[i] = silu(gate.data()[i]) * up.data()[i];
     }
@@ -75,16 +74,12 @@ void layer_forward(const Tensor& x, const LayerWeights& w,
     Tensor normed({seq, hidden});
     Tensor attn_out({seq, hidden});
 
-    // attention sublayer
     rmsnorm(x, w.input_norm, cfg.rms_eps, normed);
     attention_forward(normed, w.attn, cfg, rope, attn_out);
     for (int64_t i = 0; i < out.numel(); i++) {
         out.data()[i] = x.data()[i] + attn_out.data()[i];
     }
 
-    // ffn sublayer. The residual here comes from `out` -- the result of the
-    // attention sublayer -- not from the original x. Getting that wrong runs
-    // fine and quietly degrades the model.
     Tensor ffn_out({seq, hidden});
     rmsnorm(out, w.post_attention_norm, cfg.rms_eps, normed);
     ffn_forward(normed, w.ffn, ffn_out);
@@ -107,9 +102,6 @@ Model::Model(const std::string& model_dir) {
     embed_ = load_vector(st, "model.embed_tokens.weight");
     final_norm_ = load_vector(st, "model.norm.weight");
 
-    // Qwen3-0.6B ties the output head to the input embeddings. The file may
-    // still carry an lm_head tensor; prefer it if it's there, otherwise reuse
-    // the embedding matrix.
     if (st.has("lm_head.weight")) {
         lm_head_ = load_vector(st, "lm_head.weight");
     } else {
@@ -171,9 +163,6 @@ void Model::forward(const std::vector<int>& ids, Tensor& logits) {
     matmul_nt(normed, head, logits);
 }
 
-// One token through one layer, using the cache. Same structure as
-// layer_forward -- pre-norm, residual, pre-norm, residual -- just with the
-// cached attention step in the middle.
 static void layer_step(const Tensor& x, const LayerWeights& w,
                        const AttentionConfig& cfg, const RopeTable& rope,
                        KVCache& cache, Tensor& out) {
@@ -195,8 +184,6 @@ static void layer_step(const Tensor& x, const LayerWeights& w,
     }
 }
 
-// Quantized twin of layer_step: same pre-norm, residual, pre-norm, residual
-// shape, calling the _q attention and ffn variants instead.
 static void layer_step_q(const Tensor& x, const LayerWeights& w,
                          const QuantLayer& ql, const AttentionConfig& cfg,
                          const RopeTable& rope, KVCache& cache, Tensor& out) {
@@ -226,6 +213,9 @@ void Model::reset_cache(int max_seq) {
 }
 
 void Model::step(int token_id, Tensor& logits) {
+#ifdef VERBUM_CUDA
+    if (cuda_) { step_cuda(token_id, logits); return; }
+#endif
     if (caches_.empty()) throw std::runtime_error("call reset_cache() first");
 
     const int64_t hidden = cfg_.hidden_size;
@@ -267,9 +257,6 @@ void Model::quantize() {
         Q.up_proj = quantize_rows(L.ffn.up_proj);
         Q.down_proj = quantize_rows(L.ffn.down_proj);
 
-        // Release the f32 copies -- assigning a default-constructed Tensor
-        // drops the old vector's memory. Without this, quantizing would cost
-        // more memory than it saves rather than less.
         L.attn.q_proj = Tensor();
         L.attn.k_proj = Tensor();
         L.attn.v_proj = Tensor();
@@ -344,7 +331,6 @@ void Model::to_cuda() {
     d_rope_cos_ = upload_vec(rope_.cos);
     d_rope_sin_ = upload_vec(rope_.sin);
 
-    // Caches must already be sized -- reset_cache() has to run first.
     if (caches_.empty()) throw std::runtime_error("call reset_cache() before to_cuda()");
     const int max_seq = caches_[0].max_seq;
     const size_t cache_bytes = (size_t)max_seq * KVH * D * sizeof(float);
@@ -386,5 +372,60 @@ void Model::to_cuda() {
     cuda_ = true;
 #endif
 }
+
+#ifdef VERBUM_CUDA
+void Model::step_cuda(int token_id, Tensor& logits) {
+    const int64_t hidden = cfg_.hidden_size;
+    const int64_t vocab = cfg_.vocab_size;
+    const int H = cfg_.num_attention_heads;
+    const int KVH = cfg_.num_key_value_heads;
+    const int D = cfg_.head_dim;
+    const int64_t ffn = cfg_.intermediate_size;
+    const float eps = cfg_.rms_norm_eps;
+    const int pos = caches_[0].len;
+
+    cuda_upload(d_x_, embed_.data() + (size_t)token_id * hidden,
+                hidden * sizeof(float));
+
+    for (size_t l = 0; l < dlayers_.size(); l++) {
+        CudaLayer& C = dlayers_[l];
+
+        cuda_rmsnorm(d_x_, C.input_norm, d_normed_, 1, (int)hidden, eps);
+
+        cuda_matmul_nt(d_normed_, C.q_proj, d_q_, 1, H * D, (int)hidden);
+        cuda_matmul_nt(d_normed_, C.k_proj, d_k_, 1, KVH * D, (int)hidden);
+        cuda_matmul_nt(d_normed_, C.v_proj, d_v_, 1, KVH * D, (int)hidden);
+
+        cuda_rmsnorm(d_q_, C.q_norm, d_q_, H, D, eps);
+        cuda_rmsnorm(d_k_, C.k_norm, d_k_, KVH, D, eps);
+
+        cuda_rope(d_q_, d_rope_cos_, d_rope_sin_, pos, H, D);
+        cuda_rope(d_k_, d_rope_cos_, d_rope_sin_, pos, KVH, D);
+
+        cuda_cache_append(C.kcache, C.vcache, d_k_, d_v_, pos, KVH * D);
+
+        cuda_attn_decode(d_q_, C.kcache, C.vcache, d_context_,
+                         H, KVH, D, pos + 1);
+
+        cuda_matmul_nt(d_context_, C.o_proj, d_attn_out_, 1, (int)hidden, H * D);
+        cuda_add(d_x_, d_attn_out_, (int)hidden);
+
+        cuda_rmsnorm(d_x_, C.post_attention_norm, d_normed_, 1, (int)hidden, eps);
+        cuda_matmul_nt(d_normed_, C.gate_proj, d_gate_, 1, (int)ffn, (int)hidden);
+        cuda_matmul_nt(d_normed_, C.up_proj, d_up_, 1, (int)ffn, (int)hidden);
+        cuda_silu_mul(d_gate_, d_up_, (int)ffn);
+        cuda_matmul_nt(d_gate_, C.down_proj, d_ffn_out_, 1, (int)hidden, (int)ffn);
+        cuda_add(d_x_, d_ffn_out_, (int)hidden);
+    }
+
+    cuda_rmsnorm(d_x_, d_final_norm_, d_normed_, 1, (int)hidden, eps);
+    cuda_matmul_nt(d_normed_, d_lm_head_, d_logits_, 1, (int)vocab, (int)hidden);
+
+    cuda_sync();
+    cuda_download(logits.data(), d_logits_, vocab * sizeof(float));
+
+    for (auto& c : caches_) c.len++;
+}
+#endif
 
 }  // namespace verbum
