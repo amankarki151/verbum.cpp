@@ -10,6 +10,7 @@
 #include "verbum/quant.h"
 #include "verbum/safetensors.h"
 #include "verbum/tensor.h"
+#include "verbum/cuda_backend.h"
 
 namespace verbum {
 
@@ -62,6 +63,11 @@ public:
     void quantize();
     bool is_quantized() const { return quantized_; }
     size_t weight_bytes() const;
+    
+        // Uploads all weights to GPU memory and switches step() to the CUDA
+    // path. Throws if built without CUDA or if no device is present.
+    void to_cuda();
+    bool is_cuda() const { return cuda_; }
 
 private:
     ModelConfig cfg_;
@@ -76,6 +82,23 @@ private:
 
     bool quantized_ = false;
     std::vector<QuantLayer> qlayers_;
+
+        bool cuda_ = false;
+
+#ifdef VERBUM_CUDA
+    struct CudaLayer {
+        CudaBuffer q_proj, k_proj, v_proj, o_proj;
+        CudaBuffer gate_proj, up_proj, down_proj;
+        CudaBuffer input_norm, post_attention_norm, q_norm, k_norm;
+        CudaBuffer kcache, vcache;
+    };
+    std::vector<CudaLayer> dlayers_;
+    CudaBuffer d_embed_, d_lm_head_, d_final_norm_;
+    CudaBuffer d_rope_cos_, d_rope_sin_;
+    CudaBuffer d_x_, d_normed_, d_attn_out_, d_ffn_out_;
+    CudaBuffer d_q_, d_k_, d_v_, d_context_, d_gate_, d_up_, d_logits_;
+    void step_cuda(int token_id, Tensor& logits);
+#endif
 };
 
 }  // namespace verbum

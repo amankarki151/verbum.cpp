@@ -4,6 +4,9 @@
 #include <stdexcept>
 
 #include "verbum/ops.h"
+#ifdef VERBUM_CUDA
+#include "verbum/cuda_backend.h"
+#endif
 
 namespace verbum {
 
@@ -303,6 +306,85 @@ size_t Model::weight_bytes() const {
         }
     }
     return total;
+}
+
+void Model::to_cuda() {
+#ifndef VERBUM_CUDA
+    throw std::runtime_error(
+        "built without CUDA -- reconfigure with -DVERBUM_ENABLE_CUDA=ON");
+#else
+    if (cuda_) return;
+    if (!cuda_available()) throw std::runtime_error("no CUDA device found");
+    if (quantized_) {
+        throw std::runtime_error(
+            "CUDA path doesn't support quantized weights yet -- pick one");
+    }
+
+    const int64_t hidden = cfg_.hidden_size;
+    const int64_t vocab = cfg_.vocab_size;
+    const int H = cfg_.num_attention_heads;
+    const int KVH = cfg_.num_key_value_heads;
+    const int D = cfg_.head_dim;
+    const int64_t ffn = cfg_.intermediate_size;
+
+    auto upload_vec = [](const std::vector<float>& v) {
+        CudaBuffer b = cuda_alloc(v.size() * sizeof(float));
+        cuda_upload(b, v.data(), v.size() * sizeof(float));
+        return b;
+    };
+    auto upload_tensor = [](const Tensor& t) {
+        CudaBuffer b = cuda_alloc((size_t)t.numel() * sizeof(float));
+        cuda_upload(b, t.data(), (size_t)t.numel() * sizeof(float));
+        return b;
+    };
+
+    d_embed_ = upload_vec(embed_);
+    d_lm_head_ = upload_vec(lm_head_);
+    d_final_norm_ = upload_vec(final_norm_);
+    d_rope_cos_ = upload_vec(rope_.cos);
+    d_rope_sin_ = upload_vec(rope_.sin);
+
+    // Caches must already be sized -- reset_cache() has to run first.
+    if (caches_.empty()) throw std::runtime_error("call reset_cache() before to_cuda()");
+    const int max_seq = caches_[0].max_seq;
+    const size_t cache_bytes = (size_t)max_seq * KVH * D * sizeof(float);
+
+    dlayers_.resize(layers_.size());
+    for (size_t i = 0; i < layers_.size(); i++) {
+        LayerWeights& L = layers_[i];
+        CudaLayer& C = dlayers_[i];
+        C.q_proj = upload_tensor(L.attn.q_proj);
+        C.k_proj = upload_tensor(L.attn.k_proj);
+        C.v_proj = upload_tensor(L.attn.v_proj);
+        C.o_proj = upload_tensor(L.attn.o_proj);
+        C.gate_proj = upload_tensor(L.ffn.gate_proj);
+        C.up_proj = upload_tensor(L.ffn.up_proj);
+        C.down_proj = upload_tensor(L.ffn.down_proj);
+        C.input_norm = upload_vec(L.input_norm);
+        C.post_attention_norm = upload_vec(L.post_attention_norm);
+        C.q_norm = upload_vec(L.attn.q_norm);
+        C.k_norm = upload_vec(L.attn.k_norm);
+        C.kcache = cuda_alloc(cache_bytes);
+        C.vcache = cuda_alloc(cache_bytes);
+        cuda_zero(C.kcache);
+        cuda_zero(C.vcache);
+    }
+
+    d_x_        = cuda_alloc(hidden * sizeof(float));
+    d_normed_   = cuda_alloc(hidden * sizeof(float));
+    d_attn_out_ = cuda_alloc(hidden * sizeof(float));
+    d_ffn_out_  = cuda_alloc(hidden * sizeof(float));
+    d_q_        = cuda_alloc((size_t)H * D * sizeof(float));
+    d_k_        = cuda_alloc((size_t)KVH * D * sizeof(float));
+    d_v_        = cuda_alloc((size_t)KVH * D * sizeof(float));
+    d_context_  = cuda_alloc((size_t)H * D * sizeof(float));
+    d_gate_     = cuda_alloc(ffn * sizeof(float));
+    d_up_       = cuda_alloc(ffn * sizeof(float));
+    d_logits_   = cuda_alloc(vocab * sizeof(float));
+
+    cuda_sync();
+    cuda_ = true;
+#endif
 }
 
 }  // namespace verbum
