@@ -97,3 +97,6 @@ target_link_libraries(generate PRIVATE verbum_core)
 
 add_executable(quant_report tools/quant_report.cpp)
 target_link_libraries(quant_report PRIVATE verbum_core)
+
+add_executable(embed_check tools/embed_check.cpp)
+target_link_libraries(embed_check PRIVATE verbum_core)
