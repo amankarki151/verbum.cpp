@@ -54,7 +54,8 @@ def check(cond, what):
 print("prompt assembly")
 p = build_prompt("You are Mara.", [], "Hello")
 check("<|im_start|>system" in p, "has a system block")
-check(p.endswith("<|im_start|>assistant\n"), "ends ready for the model to continue")
+check(p.endswith("<|im_start|>assistant\n<think>\n\n</think>\n\n"),
+      "ends ready for the model to continue, thinking pre-empted")
 check("remember" not in p, "no memory section when nothing was recalled")
 
 print("\nmemory recall")

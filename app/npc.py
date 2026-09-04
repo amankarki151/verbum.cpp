@@ -50,6 +50,14 @@ def build_prompt(persona, recalled, player_line):
     Recalled memories go *before* the current line, inside the system block,
     so the model reads them as established context rather than as part of
     what the player just said.
+
+    The empty <think></think> right after the assistant turn starts is not
+    decorative -- Qwen3 is a hybrid reasoning model that emits a reasoning
+    block by default. Without this, the model spends its token budget
+    thinking out loud instead of speaking in character, and a short
+    max_tokens cuts it off mid-thought before it ever answers. An empty,
+    pre-closed think block tells the model the reasoning phase is already
+    done, so it goes straight to the actual reply.
     """
     parts = [f"<|im_start|>system\n{persona}"]
     if recalled:
@@ -57,7 +65,7 @@ def build_prompt(persona, recalled, player_line):
         parts.append(f"\n\nThings you remember from earlier:\n{lines}")
     parts.append("<|im_end|>\n")
     parts.append(f"<|im_start|>user\n{player_line}<|im_end|>\n")
-    parts.append("<|im_start|>assistant\n")
+    parts.append("<|im_start|>assistant\n<think>\n\n</think>\n\n")
     return "".join(parts)
 
 
@@ -84,8 +92,6 @@ class Npc:
         )
         reply = reply.strip()
 
-        # Store both sides. The NPC's own words matter too -- otherwise it
-        # can't remember what it already told you.
         self.memory.add("player", player_line, vec)
         self.memory.add(self.name, reply, self.engine.embed_text(reply))
 
