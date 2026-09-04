@@ -1,6 +1,17 @@
 cmake_minimum_required(VERSION 3.20)
 project(verbum LANGUAGES CXX)
 
+option(VERBUM_ENABLE_CUDA "Build the CUDA backend" OFF)
+
+if(VERBUM_ENABLE_CUDA)
+  enable_language(CUDA)
+  set(CMAKE_CUDA_STANDARD 17)
+  set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES 75)   # T4
+  endif()
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -24,8 +35,12 @@ add_library(verbum_core
   core/src/model.cpp
   core/src/generate.cpp
   core/src/quant.cpp
-  
 )
+
+if(VERBUM_ENABLE_CUDA)
+  target_sources(verbum_core PRIVATE kernels/cuda_ops.cu)
+  target_compile_definitions(verbum_core PUBLIC VERBUM_CUDA)
+endif()
 
 target_include_directories(verbum_core PUBLIC
   ${CMAKE_SOURCE_DIR}/core/include
@@ -58,19 +73,19 @@ add_executable(test_block tests/test_block.cpp)
 target_link_libraries(test_block PRIVATE verbum_core)
 add_test(NAME block COMMAND test_block)
 
-add_executable(test_logits tests/test_logits.cpp)
-target_link_libraries(test_logits PRIVATE verbum_core)
-
 add_executable(test_cache tests/test_cache.cpp)
 target_link_libraries(test_cache PRIVATE verbum_core)
 add_test(NAME cache COMMAND test_cache)
 
-add_executable(generate tools/generate.cpp)
-target_link_libraries(generate PRIVATE verbum_core)
-
 add_executable(test_quant tests/test_quant.cpp)
 target_link_libraries(test_quant PRIVATE verbum_core)
 add_test(NAME quant COMMAND test_quant)
+
+add_executable(test_logits tests/test_logits.cpp)
+target_link_libraries(test_logits PRIVATE verbum_core)
+
+add_executable(generate tools/generate.cpp)
+target_link_libraries(generate PRIVATE verbum_core)
 
 add_executable(quant_report tools/quant_report.cpp)
 target_link_libraries(quant_report PRIVATE verbum_core)
