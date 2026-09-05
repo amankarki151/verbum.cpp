@@ -37,6 +37,8 @@ done.
 
 ![Meera recalling an earlier conversation](docs/demo.png)
 
+[▶ Watch the demo](https://youtu.be/yTUsrrbz3eE)
+
 Two NPCs, Meera and Arjun, each with their own memory backed by a real
 Lattice HNSW index. Tell Meera something, ask Arjun something unrelated, come
 back to Meera — she remembers, he doesn't. Nothing about that sentence is a
