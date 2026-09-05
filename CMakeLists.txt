@@ -100,3 +100,6 @@ target_link_libraries(quant_report PRIVATE verbum_core)
 
 add_executable(embed_check tools/embed_check.cpp)
 target_link_libraries(embed_check PRIVATE verbum_core)
+
+add_executable(bench tools/bench.cpp)
+target_link_libraries(bench PRIVATE verbum_core)
