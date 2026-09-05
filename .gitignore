@@ -20,3 +20,4 @@ venv/
 
 bench/results/*.json/tmp
 build-py/
+app/npc_data/
