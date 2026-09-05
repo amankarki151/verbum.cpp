@@ -84,7 +84,12 @@ PYBIND11_MODULE(verbum, m) {
     py::class_<Engine>(m, "Engine")
         .def(py::init<const std::string&, bool>(),
              py::arg("model_dir"), py::arg("quantize") = false,
-             "Load a model. Set quantize=True for int8 weights.")
+             py::call_guard<py::gil_scoped_release>(),
+             "Load a model. Set quantize=True for int8 weights. Releases "
+             "the GIL during construction -- loading involves real C++ work "
+             "(mmap, per-layer materialization) that would otherwise freeze "
+             "any Python thread trying to do something else, like a UI "
+             "event loop, for the entire load.")
         .def("encode", &Engine::encode, py::arg("text"))
         .def("decode", &Engine::decode, py::arg("ids"))
         .def("embed_text", &Engine::embed_text, py::arg("text"),
