@@ -36,8 +36,8 @@ Nothing here calls the network. No API keys, no cloud inference.
 | INT8 quantization | working, identical output to f32 at 3.99x on quantized matrices, 1.78x whole-model with current lm_head duplication (2.24x once that's fixed) |
 | Python bindings | working, pybind11 wraps the engine text-in/text-out; token ids, roundtrip decode, and generation all verified to match the C++ CLI exactly |
 | NPC orchestration (Python) | working, prompt assembly and per-NPC memory isolation tested against a fake engine; real memory recall confirmed even with an off-topic turn in between |
-| NPC memory (Lattice) | not started -- orchestration layer above is built against a brute-force stand-in, swapping in Lattice's real HNSW is a one-line change once its header is available |
-| Demo shell | not started |
+| NPC memory (Lattice) | working, real HNSW storage and retrieval confirmed correct against real competing memories; persona/roleplay quality is a known limitation of the 0.6B model, to be tuned during the Day 12 demo |
+| Demo shell | working, pygame scene with click-to-talk, async generation keeps the window responsive, per-npc memory via real lattice confirmed visually |
 
 ## Benchmarks
 
