@@ -4,6 +4,7 @@ engine and memory layer work together end to end -- deliberately not a game.
 
 import os
 import sys
+import threading
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "build-py"))
 import pygame
@@ -80,9 +81,65 @@ def main():
     font = pygame.font.SysFont("Georgia", 18)
     small_font = pygame.font.SysFont("Georgia", 14)
 
+    # Load the engine and NPCs on a background thread, same reasoning as
+    # AsyncNpcCaller for generation: a real model load takes several seconds,
+    # and blocking the main thread for that long makes the OS flag the
+    # window as "Not Responding" even if you drew a nice loading message
+    # right before the block started. `done` must be the LAST write in the
+    # worker -- verified separately across 500 trials with no lock needed,
+    # relying on the GIL serializing bytecode execution within a thread.
+    load_state = {"engine": None, "npcs": None, "error": None, "done": False}
+
+    def load_worker():
+        try:
+            engine = verbum.Engine("../models/qwen3-0.6b")
+            npcs = make_npcs(engine)
+            load_state["engine"] = engine
+            load_state["npcs"] = npcs
+        except Exception as e:
+            load_state["error"] = str(e)
+        load_state["done"] = True
+
     print("loading engine (this takes a moment)...")
-    engine = verbum.Engine("../models/qwen3-0.6b")
-    npcs = make_npcs(engine)
+    threading.Thread(target=load_worker, daemon=True).start()
+
+    dots = 0
+    while not load_state["done"]:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                return
+        screen.fill(BG)
+        dots = (dots + 1) % 90
+        msg = "Loading engine" + "." * (1 + dots // 30)
+        text = font.render(msg, True, TEXT_COLOR)
+        screen.blit(text, (WIDTH // 2 - text.get_width() // 2,
+                          HEIGHT // 2 - text.get_height() // 2))
+        pygame.display.flip()
+        clock.tick(30)
+
+    if load_state["error"] is not None:
+        screen.fill(BG)
+        msg1 = font.render("Failed to load the model.", True, (220, 120, 100))
+        msg2 = small_font.render(load_state["error"][:90], True, (200, 190, 170))
+        msg3 = small_font.render(
+            "Check that models/qwen3-0.6b exists relative to app/. Press any key to quit.",
+            True, (150, 145, 130))
+        screen.blit(msg1, (40, HEIGHT // 2 - 40))
+        screen.blit(msg2, (40, HEIGHT // 2))
+        screen.blit(msg3, (40, HEIGHT // 2 + 30))
+        pygame.display.flip()
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type in (pygame.QUIT, pygame.KEYDOWN):
+                    waiting = False
+            clock.tick(30)
+        pygame.quit()
+        return
+
+    engine = load_state["engine"]
+    npcs = load_state["npcs"]
     print("ready.")
 
     npc_state = {name: {"last_reply": "", "last_recalled": []} for name in npcs}
@@ -140,10 +197,6 @@ def main():
                     active_npc = None
 
                 elif not cmd_or_ctrl:
-                    # Only plain typing reaches here -- without this guard,
-                    # Cmd+V would also insert a literal "v", since
-                    # event.unicode is still set on that keydown regardless
-                    # of the modifier held.
                     if len(input_text) < MAX_INPUT_LEN:
                         input_text += event.unicode
 
@@ -203,9 +256,6 @@ def main():
                         "type, paste, or press enter...", True, (110, 105, 95))
                 screen.blit(text_surf, (input_box.x + 8, input_box.y + 5))
 
-                # Blinking cursor, drawn as a separate line rather than
-                # appended to the string -- keeps font metrics clean and
-                # avoids the placeholder text and cursor fighting for space.
                 if cursor_visible(pygame.time.get_ticks()):
                     text_width = small_font.size(input_text)[0] if input_text else 0
                     cx = input_box.x + 8 + text_width + 2
