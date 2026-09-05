@@ -118,6 +118,7 @@ def main():
         pygame.display.flip()
         clock.tick(30)
 
+
     if load_state["error"] is not None:
         screen.fill(BG)
         msg1 = font.render("Failed to load the model.", True, (220, 120, 100))
