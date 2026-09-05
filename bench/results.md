@@ -193,3 +193,48 @@ flag on the number itself.
 Prefill's smaller speedup (13.2x vs decode's 36.2x) traces back to the same
 unbatched-prefill limitation noted in Day 6 -- fixed per-call overhead
 matters more across 5 tokens than 20.
+
+## Benchmark summary (Day 13, single session per machine)
+
+50 generated tokens, greedy sampling, same prompt ("The capital of France
+is"), each machine's three (or two) modes measured back to back in one
+sitting -- not stitched together from different days.
+
+| Mode | Machine | tok/s | p50 latency | p99 latency | Weights |
+|---|---|---|---|---|---|
+| f32 | Mac (arm64) | 1.28 | 593.0 ms | 1857.9 ms | 3006.5 MB |
+| int8 | Mac (arm64) | 1.72 | 547.8 ms | 1090.3 ms | 1686.7 MB |
+| f32 | Kaggle (CPU) | 0.73 | 1372.2 ms | 1401.4 ms | 3006.5 MB |
+| int8 | Kaggle (CPU) | 1.05 | 948.2 ms | 1036.0 ms | 1686.7 MB |
+| cuda (f32) | Kaggle T4 | 28.01 | 35.6 ms | 37.8 ms | 3006.5 MB |
+
+**Read the CPU rows as "roughly this," not exact.** Kaggle's CPU allocation
+is shared and has shown 2x+ swings across sessions earlier in this project
+(0.74 to 1.83 tok/s for the same f32 workload on different days). The GPU
+number is far more trustworthy as reproducible: this run's 28.01 tok/s sits
+close to an earlier, completely separate session's 26.83 tok/s, and this
+run's own p50/p99 are nearly identical to each other -- almost no tail
+latency, unlike the CPU rows' more variable single-token timings.
+
+**CUDA speedup, same session, apples to apples:** 38.4x over this session's
+CPU f32, 26.7x over this session's CPU int8. Sanity-checked against
+hardware: a T4's ~320 GB/s memory bandwidth puts a theoretical ceiling
+around 106 tok/s for this memory-bound decode workload (every token reads
+the full ~3GB of weights once). 28.01 tok/s is about 26% of that ceiling --
+consistent with the earlier CUDA integration day's estimate, and expected
+for a first integration with per-operation kernel launches and no kernel
+fusion yet.
+
+**Quantization's speed effect is larger here than Day 9's original
+measurement** (Mac: 34% faster; Kaggle: 44% faster; Day 9 reported ~3%).
+Plausible explanation, not a settled finding: `matmul_nt_q8` still converts
+int8 to float before multiplying -- no vectorized int8 arithmetic -- but it
+moves 4x less data through memory to do it, and decode is a
+memory-bandwidth-bound workload. Reduced memory traffic could genuinely
+speed up a bandwidth-bound matmul even with identical per-element math.
+Every number here is a single run, not an averaged series, so this is an
+honest observation with a plausible mechanism, not a claimed multiplier.
+
+Earlier per-day entries below are kept for their historical detail (what
+was being verified on each specific day) -- this table is the one honest,
+single-session comparison to actually cite.
