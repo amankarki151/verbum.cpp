@@ -38,12 +38,16 @@ NPCS = [
      "persona": "You are Meera, a blacksmith in a small village. Gruff but "
                 "kind. The player is a traveler talking to you -- whatever "
                 "they tell you about their own life is about them, not you. "
-                "Answer in one short sentence."},
+                "Speak in your own words -- never repeat the player's "
+                "sentence back to them, even partly. Answer in one short "
+                "sentence."},
     {"name": "Arjun", "pos": (650, 300),
      "persona": "You are Arjun, an innkeeper in a small village. Cheerful "
                 "and talkative. The player is a traveler talking to you -- "
                 "whatever they tell you about their own life is about them, "
-                "not you. Answer in one short sentence."},
+                "not you. Speak in your own words -- never repeat the "
+                "player's sentence back to them, even partly. Answer in one "
+                "short sentence."},
 ]
 
 
@@ -73,6 +77,18 @@ def cursor_visible(ticks_ms, interval_ms=CURSOR_BLINK_MS):
 
 
 def main():
+        # Start each demo run from a clean slate. Lattice's vector storage is
+    # genuinely persistent across restarts, but NpcMemory's text side
+    # (MemoryRecord) never was -- it only ever lived in an in-memory list
+    # that dies with the process. Half-persisted state across two mismatched
+    # storage layers is worse than none: a fresh session's locally-numbered
+    # ids can collide with old ids still sitting in Lattice's on-disk index,
+    # and a query can return an id with no matching text anywhere, which is
+    # exactly what crashed here. Wiping npc_data/ at every launch keeps both
+    # sides honestly in sync -- memory persists within one run, which is all
+    # this demo has ever actually tested, not across separate launches.
+    import shutil
+    shutil.rmtree(DATA_DIR, ignore_errors=True)
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("verbum.cpp -- NPC memory demo")
