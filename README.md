@@ -35,7 +35,7 @@ done.
 
 ### The point, in one screenshot
 
-*(demo screenshot/gif goes here — an NPC recalling something said a turn earlier)*
+![Meera recalling an earlier conversation](docs/demo.png)
 
 Two NPCs, Meera and Arjun, each with their own memory backed by a real
 Lattice HNSW index. Tell Meera something, ask Arjun something unrelated, come
