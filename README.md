@@ -70,9 +70,14 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
-Download Qwen3-0.6B's weights into `models/qwen3-0.6b/` (config.json,
-tokenizer.json, model.safetensors — see `scripts/` for the download command),
-then:
+Download Qwen3-0.6B's weights into `models/qwen3-0.6b/`:
+
+```bash
+pip install -U huggingface_hub
+hf download Qwen/Qwen3-0.6B --local-dir models/qwen3-0.6b --exclude "*.pth" --exclude "*.onnx"
+```
+
+Then:
 
 ```bash
 # plain f32, greedy
@@ -95,9 +100,10 @@ python3 demo.py
 
 ## Benchmarks
 
-Real numbers, all three modes measured back to back in one sitting per
-machine — not stitched together from different days, since this project
-watched that give misleading comparisons more than once.
+Real numbers, measured back to back in one sitting per machine (the Mac has
+no CUDA device, so only f32/int8 there) — not stitched together from
+different days, since this project watched that give misleading comparisons
+more than once.
 
 | Mode | Machine | tok/s | p50 latency | p99 latency | Weights |
 |---|---|---|---|---|---|
