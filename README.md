@@ -155,7 +155,7 @@ discrepancy: [`bench/results.md`](bench/results.md).
 
 - [What Actually Happens Inside a Transformer Forward Pass](https://amankarki.hashnode.dev/what-actually-happens-inside-a-transformer-forward-pass) (also on Medium via Stackademic)
 - [INT8 Quantization the Second Time Around](https://amankarki.hashnode.dev/int8-quantization-the-second-time-around) (also on Medium via Stackademic)
-- [Two From-Scratch Systems, and the Day They Talked](https://amankarki.hashnode.dev/two-from-scratch-systems-and-the-day-they-talked)
+- [Two From-Scratch Systems, and the Day They Talked](https://amankarki.hashnode.dev/two-from-scratch-systems-and-the-day-they-talked) (also on Medium via Stackademic)
 
 ## License
 
