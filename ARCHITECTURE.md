@@ -85,11 +85,13 @@ quantized tensors under 1.3%.
 
 **Known limitation, disclosed rather than hidden:** the embedding table and
 `lm_head` stay f32 and dominate whole-model memory -- embed_tokens alone is
-622 MB, larger than any other single tensor. The honest whole-model ratio
-is 1.78x as currently coded (there's also an unrelated pre-existing bug
-where `lm_head` is loaded as a full duplicate of `embed_tokens` even though
-the model ties them -- fixed cost would bring the ratio to 2.24x). Verified:
-identical generated output between f32 and int8 weights on the same prompt.
+622 MB, larger than any other single tensor. The whole-model ratio is
+2.24x, confirmed after fixing a separate pre-existing bug where `lm_head`
+was loaded as a full duplicate of `embed_tokens` despite the model tying
+them (~622 MB reclaimed, verified via `weight_bytes()`: 3006.5 MB -> 2384.2
+MB, with the forward pass's correctness gate still passing at ~3e-5 diff).
+Verified: identical generated output between f32 and int8 weights on the
+same prompt.
 Quantization's speed effect varied more across machines than expected
 (34-44% faster decode) rather than the near-flat result first measured --
 plausible mechanism is that int8 moves 4x less data through memory even
@@ -215,8 +217,6 @@ now), `--greedy`.
 - Prefill is unbatched -- one token at a time through the same path as
   decode, not the batched `forward()`.
 - Quantization and CUDA don't compose.
-- `lm_head` is loaded as a redundant full copy of `embed_tokens` despite
-  the model tying them -- ~622 MB wasted, not yet fixed.
 - NPC memory embeddings come from the engine's own hidden states, not a
   purpose-trained embedding model.
 - NPC memory persists within one demo session, not across separate

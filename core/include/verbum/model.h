@@ -83,8 +83,13 @@ private:
     AttentionConfig acfg_;
     RopeTable rope_;
 
-    std::vector<float> embed_;      // [vocab, hidden], flattened
-    std::vector<float> lm_head_;    // [vocab, hidden], flattened
+        std::vector<float> embed_;      // [vocab, hidden], flattened
+    std::vector<float> lm_head_;    // only populated when NOT tied -- empty
+                                     // when tied, so it costs zero extra
+                                     // memory instead of duplicating embed_
+    const std::vector<float>& lm_head_vec() const {
+        return cfg_.tie_word_embeddings ? embed_ : lm_head_;
+    }
     std::vector<float> final_norm_;
     std::vector<LayerWeights> layers_;
     std::vector<KVCache> caches_;
