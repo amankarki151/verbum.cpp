@@ -1,5 +1,5 @@
 #include "verbum/model.h"
-
+#include <iostream>
 #include <cmath>
 #include <stdexcept>
 
@@ -102,10 +102,35 @@ Model::Model(const std::string& model_dir) {
     embed_ = load_vector(st, "model.embed_tokens.weight");
     final_norm_ = load_vector(st, "model.norm.weight");
 
-    if (st.has("lm_head.weight")) {
-        lm_head_ = load_vector(st, "lm_head.weight");
-    } else {
-        lm_head_ = embed_;
+      // Fixed: when tied, never populate lm_head_ as a second owned vector at
+    // all -- std::vector's assignment operator deep-copies, so "lm_head_ =
+    // embed_" was never actually sharing memory, just skipping the disk
+    // read. Every downstream use goes through lm_head_vec() instead of
+    // touching lm_head_ directly, so it can fall back to embed_ when tied.
+    if (!cfg_.tie_word_embeddings) {
+        if (st.has("lm_head.weight")) {
+            lm_head_ = load_vector(st, "lm_head.weight");
+        } else {
+            std::cerr << "warning: config says untied embeddings but no "
+                         "lm_head.weight tensor found -- falling back to "
+                         "embed_tokens anyway\n";
+        }
+    }
+    // else: lm_head_ stays empty. lm_head_vec() below resolves to embed_.
+
+    // Sanity check: if the file happens to have both and claims they're
+    // tied, verify that's actually true rather than trusting the flag blindly.
+    if (cfg_.tie_word_embeddings && st.has("lm_head.weight")) {
+        std::vector<float> lm_head_check = load_vector(st, "lm_head.weight");
+        bool mismatch = false;
+        for (size_t i = 0; i < embed_.size(); i += 97919) {
+            if (std::fabs(embed_[i] - lm_head_check[i]) > 1e-6f) { mismatch = true; break; }
+        }
+        if (mismatch) {
+            throw std::runtime_error(
+                "config claims tied embeddings but embed_tokens and lm_head.weight "
+                "differ -- do not silently share these, something is wrong");
+        }
     }
 
     const int rope_positions =
@@ -159,7 +184,7 @@ void Model::forward(const std::vector<int>& ids, Tensor& logits) {
     Tensor normed({seq, hidden});
     rmsnorm(h, final_norm_, cfg_.rms_norm_eps, normed);
 
-    Tensor head({vocab, hidden}, lm_head_);
+    Tensor head({vocab, hidden}, lm_head_vec());
     matmul_nt(normed, head, logits);
 }
 
@@ -281,7 +306,7 @@ void Model::step(int token_id, Tensor& logits) {
     Tensor normed({1, hidden});
     rmsnorm(h, final_norm_, cfg_.rms_norm_eps, normed);
 
-    Tensor head({vocab, hidden}, lm_head_);
+    Tensor head({vocab, hidden}, lm_head_vec());
     matmul_nt(normed, head, logits);
 }
 
@@ -370,7 +395,7 @@ void Model::to_cuda() {
     };
 
     d_embed_ = upload_vec(embed_);
-    d_lm_head_ = upload_vec(lm_head_);
+   d_lm_head_ = upload_vec(lm_head_vec());
     d_final_norm_ = upload_vec(final_norm_);
     d_rope_cos_ = upload_vec(rope_.cos);
     d_rope_sin_ = upload_vec(rope_.sin);

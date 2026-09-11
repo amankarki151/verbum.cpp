@@ -142,22 +142,23 @@ quantized matrices alone. The embedding table and lm_head stay f32 -- and
 embed_tokens turns out to be the single largest tensor in the entire model
 (622 MB on its own), so it dominates what "whole model" actually means.
 
-Worse: the current loader loads `lm_head.weight` as a full separate copy of
-`embed_tokens.weight` even though the config says `tied_embeddings=yes` and
-they're numerically identical -- an existing inefficiency from Day 5, not
-something today introduced, costing an extra ~622 MB for nothing. Flagged
-for a future fix, not corrected today, since fixing it isn't quantization's
-job and conflating the two would muddy both numbers.
+An earlier version of this loader also loaded `lm_head.weight` as a full
+separate copy of `embed_tokens.weight`, despite the config saying
+`tied_embeddings=yes` and the two being numerically identical -- an
+inefficiency from Day 5, not something quantization introduced. That's
+since been fixed: `lm_head` now resolves directly to `embed_tokens` when
+tied, instead of holding a second owned copy. Verified via
+`weight_bytes()`: 3006.5 MB -> 2384.2 MB, a real ~622 MB reduction, with
+`test_logits` still passing at the same ~3e-5 diff as before the fix.
 
-| | Total f32 (current code) | Total after quantizing | Whole-model ratio |
+| | Total f32 | Total after quantizing | Whole-model ratio |
 |---|---|---|---|
-| As currently loaded (with the duplicate) | 3006.5 MB | 1686.7 MB | 1.78x |
-| If the lm_head duplication were also fixed | 2384.2 MB | 1064.3 MB | 2.24x |
+| Before the lm_head fix (historical) | 3006.5 MB | 1686.7 MB | 1.78x |
+| Current (lm_head fix applied) | 2384.2 MB | 1064.3 MB | 2.24x |
 
 The honest number to lead with anywhere public is **2.24x whole-model**, not
-3.99x -- that's what quantization alone actually buys once the unrelated
-lm_head bug isn't inflating the "before" number.
-
+3.99x -- and unlike when this section was first written, 2.24x is now the
+real current-code number, not a hypothetical.
 Honest note on speed: decode throughput barely moved (1.83 -> 1.88 tok/s).
 Expected -- matmul_nt_q8 converts each int8 weight to float before
 multiplying, with no SIMD speedup applied. Today's result is a memory win,
