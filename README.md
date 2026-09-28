@@ -88,7 +88,19 @@ Then:
 
 # GPU decode (needs a rebuild with -DVERBUM_ENABLE_CUDA=ON, and a CUDA device)
 ./build/generate -m models/qwen3-0.6b -p "The capital of France is" --greedy --cuda
+
 ```
+The Python bindings (needed by the demo) are off by default:
+
+```bash
+pip install pybind11
+cmake -B build-py -DVERBUM_BUILD_PYTHON=ON -DPYBIND11_FINDPYTHON=ON \
+  -DPython_EXECUTABLE=$(which python) \
+  -Dpybind11_DIR=$(python -m pybind11 --cmakedir)
+cmake --build build-py -j
+```
+
+This produces `verbum.cpython-*-darwin.so` (the suffix depends on your OS and Python version). `PYBIND11_FINDPYTHON=ON` matters on Anaconda setups: without it, CMake can pick up the `python.app` wrapper and fail with a missing `Python.h`.
 
 The demo shell:
 

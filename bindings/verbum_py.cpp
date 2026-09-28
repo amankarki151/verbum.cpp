@@ -93,7 +93,9 @@ PYBIND11_MODULE(verbum, m) {
         .def("encode", &Engine::encode, py::arg("text"))
         .def("decode", &Engine::decode, py::arg("ids"))
         .def("embed_text", &Engine::embed_text, py::arg("text"),
-             "Mean-pooled hidden state as a sentence embedding.")
+             py::call_guard<py::gil_scoped_release>(),
+             "Mean-pooled hidden state as a sentence embedding. Releases "
+             "the GIL -- this runs a real forward pass, same as generate().")
         .def("generate", &Engine::generate,
              py::arg("prompt"),
              py::arg("max_tokens") = 60,
